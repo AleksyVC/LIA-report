@@ -1,0 +1,230 @@
+#include "IRremote.h"//includes the infrared remote's library
+#define left_motor_direction 7  //defines pin 7 as left_motor_direction
+#define left_motor_speed 5  //defines pin 5 as left_motor_speed
+#define right_motor_direction 8  //defines pin 8 as right_motor_direction
+#define right_motor_speed 6 //defines pin 6 as right_motor_speed
+#define standby_pin 3 //defines pin 3 as the standby pin
+
+
+//INFRARED REMOTE
+int receiver = 9; // Signal Pin of IR receiver to Arduino Digital Pin 6
+IRrecv irrecv(receiver);
+decode_results results; 
+
+int mode = 0; //sets the mode of the car when nothing is pressed to mode 0
+
+//ULTRASONIC
+#define trigPin 13//defines the output ultrasonic value pin
+#define echoPin 12//defines the input ultrasonic value pin 
+float duration, distance;//setting up variables for the duration before the wave is received and calculates the distance
+
+
+//SERVO
+#include <Servo.h>//includes the servo library
+Servo myservo;
+
+
+void setup()
+{ 
+//sets pins 0 to 8 as OUTPUT pins
+for(int i=0; i<9; i ++){
+pinMode(i,OUTPUT); 
+}
+digitalWrite(3, HIGH);// standby pin
+
+//INFRARED REMOTE
+irrecv.enableIRIn(); // Start the receiver
+Serial.begin(9600);
+
+//ULTRASONIC SENSOR
+pinMode(trigPin, OUTPUT);// setting pin 10 as an output
+pinMode(echoPin, INPUT);//setting pin 13 as an input
+
+//servo
+myservo.attach(10);  // attaches the servo on pin 9 to the servo object
+}
+
+
+//MOVEMENT FUNCTIONS
+void forward(){
+digitalWrite(left_motor_direction, 1);   //sets the motor direction to straight 
+digitalWrite(right_motor_direction, 1);  //sets the motor direction to straight 
+analogWrite(left_motor_speed, 100);     //sets the motor speed 
+analogWrite(right_motor_speed, 100);    //sets the motor speed
+}
+
+void backward(){
+digitalWrite(left_motor_direction, 0);  //sets the motor direction to reverse
+digitalWrite(right_motor_direction, 0); //sets the motor direction to reverse
+analogWrite(left_motor_speed, 100);  //sets the motor speed 
+analogWrite(right_motor_speed, 100); //sets the motor speed
+}
+
+void right(){
+digitalWrite(left_motor_direction, 0);   //sets the motor direction to reverse
+digitalWrite(right_motor_direction, 1);  //sets the motor direction to straight 
+analogWrite(left_motor_speed, 75);    //sets the motor speed
+analogWrite(right_motor_speed, 75);   //sets the motor speed
+}
+
+void left(){
+digitalWrite(left_motor_direction, 1);  //sets the motor direction to straight
+digitalWrite(right_motor_direction, 0); //sets the motor direction to reverse
+analogWrite(left_motor_speed, 75);    //sets the motor speed
+analogWrite(right_motor_speed, 75);   //sets the motor speed
+}
+
+void stop(){
+digitalWrite(left_motor_direction, 1);  //sets the motor direction to straight
+digitalWrite(right_motor_direction, 1); //sets the motor direction to straight
+analogWrite(left_motor_speed, 0);   //sets the motor speed
+analogWrite(right_motor_speed, 0);  //sets the motor speed
+}
+
+void forward_right(){
+digitalWrite(left_motor_direction, 1);  //sets the motor direction to straight
+digitalWrite(right_motor_direction, 1); //sets the motor direction to straight
+analogWrite(left_motor_speed, 100);  //sets the motor speed
+analogWrite(right_motor_speed, 50);  //sets the motor speed
+}
+
+void forward_left(){
+digitalWrite(left_motor_direction, 1);   //sets the motor direction to straight
+digitalWrite(right_motor_direction, 1);  //sets the motor direction to straight
+analogWrite(left_motor_speed, 50);  //sets the motor speed
+analogWrite(right_motor_speed, 100);//sets the motor speed
+}
+
+//ULTRASONIC SENSOR READING
+void read(){
+// Write a pulse to the HC-SR04 Trigger Pin 
+digitalWrite(trigPin, LOW);//turns the trigger pin off
+delayMicroseconds(2);//delays for 2 microseconds
+digitalWrite(trigPin, HIGH);;//turns the trigger pin 10 on
+delayMicroseconds(10);//delays for 10 microseconds
+digitalWrite(trigPin, LOW);;//sets the trigger pin 10 off
+duration = pulseIn(echoPin, HIGH);;//reads the value returned from pin 13 and stores it in duration(of wave)
+distance = (duration / 2) * 0.0343;//converts duration into distance in metric centimeters
+Serial.println(distance);
+}
+
+
+void loop(){
+
+if(mode == 0){   
+stop();
+}
+  
+//IR MANNUAL CONTROL
+if (irrecv.decode(&results)) 
+
+{
+switch(results.value)
+
+{
+if(mode == 1){
+case 16736925: // sraight button
+forward();                     
+break;
+      
+case 16720605: // left button
+left();                     
+break;
+
+case 16754775: // backward button
+backward();
+break;
+      
+case 16761405: // right button
+right();
+break;
+}
+
+case 16738455: // 1 button 
+mode = 1;
+break;
+      
+case 16750695: // 2 button
+mode = 2;
+break;
+
+case 16756815: // 3 button
+mode = 3;
+break;
+      
+case 16712445: // OK button
+mode = 0;
+break;
+}
+
+Serial.println(results.value);
+irrecv.resume(); // receive the next value
+} 
+
+
+//LINE FOLLOWER
+if(mode == 2){
+int right_sensor = analogRead(A0);   //reads the right sensor  
+int middle_sensor = analogRead(A1);  //reads the middle sensor
+int left_sensor = analogRead(A2);    //reads the left sensor
+
+if (300<middle_sensor<450 && left_sensor<50 && right_sensor<50){  //when the line is detceted in the middle go straight
+forward();
+}
+if (left_sensor<50 && middle_sensor<50 && right_sensor<50 ){  //if no sensors detect the line, spin in circles to the right to find the line
+left();
+}
+
+if (300<left_sensor<450 && middle_sensor<300 && right_sensor<50){  //when the sensor on the left detects the line pivot towards the right
+left();
+}
+
+if(300<right_sensor<450 && middle_sensor<300 && left_sensor<50){  // when the sensor on the right detects the line pivot towards the left 
+right();
+}
+}
+
+
+//ULTRASONIC
+else if(mode == 3){
+forward();  //goes straight
+myservo.write(90); //looks straight              
+read();  //ultrasonic sensor reads the distance
+
+/*if the distance read by the sensor is lower than 20cm, the car stops and then looks to the left to see if the area is clear
+If yes, the car turns to the left then goes straight with the sensor looking straight*/ 
+if (distance <= 20) {
+stop();
+myservo.write(180);
+delay(1000);
+read();
+myservo.write(90);   
+
+/*if the distance read by the sensor is lower than 20cm, the car stops and then looks to the left to see if the area is clear
+If no, the sensor looks to the right then goes straight with the sensor looking straight*/
+if (distance <= 20) {
+myservo.write(0);
+delay(1000);
+read();
+myservo.write(90);   
+
+
+if (distance <= 20) {
+left();
+delay(1200);
+}
+else{
+right();
+delay(600);
+}
+}
+else{
+left();
+delay(600);
+}
+
+}
+}
+
+}/* --end main loop -- */
+
